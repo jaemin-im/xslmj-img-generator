@@ -3,12 +3,12 @@
     <h1>마작패 이미지 생성기</h1>
     
     <div class="input-section">
-      <label for="tileCode">마작패 코드 입력 (예: 123m35678p12399s):</label>
+      <label for="tileCode">마작패 코드 입력 (예: 123m35678p12399s o 5p):</label>
       <input
         id="tileCode"
         v-model="inputCode"
         type="text"
-        placeholder="123m35678p12399s 등"
+        placeholder="123m35678p12399s, o (뒷면), 띄어쓰기 등"
         @keyup.enter="addTiles"
       />
       <button @click="addTiles">추가</button>
@@ -69,7 +69,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import MahjongTile from '../components/MahjongTile.vue'
-import { parseTileString } from '../utils/tileUtils'
+import { parseTileString, isTileBack } from '../utils/tileUtils'
 
 interface TileRow {
   tiles: string[]
@@ -109,62 +109,124 @@ const clearAllTiles = () => {
 }
 
 /**
- * 타일 행을 캔버스에 렌더링
+ * 캔버스에 타일을 렌더링하는 헬퍼 함수
  */
-const renderTilesToCanvas = (tiles: string[]): HTMLCanvasElement => {
+const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement, tile: string, posX: number, tileWidth: number, tileHeight: number) => {
+  // 공간 처리
+  if (tile === '_space_') {
+    ctx.fillStyle = 'transparent'
+    ctx.fillRect(posX, 0, 16, tileHeight)
+    return
+  }
+
+  // 일반 타일 또는 뒷면 처리
+  const match = tile.match(/^(\d+)([mpsz])$/)
+  let number: number
+  let suit: string
+  let isBack = false
+
+  if (tile === 'o') {
+    // 뒷면
+    isBack = true
+    number = 5
+    suit = 'z'
+  } else if (match) {
+    number = parseInt(match[1])
+    suit = match[2]
+  } else {
+    throw new Error(`Invalid tile: ${tile}`)
+  }
+
+  // 배경 위치 계산
+  let y = 0
+  switch (suit) {
+    case 'm': y = 0; break
+    case 'p': y = -44; break
+    case 's': y = -88; break
+    case 'z': y = -132; break
+  }
+  const x = -(number - 1) * 30
+
+  // 임시 캔버스에 타일 그리기
+  const tempCanvas = document.createElement('canvas')
+  tempCanvas.width = tileWidth
+  tempCanvas.height = tileHeight
+  const tempCtx = tempCanvas.getContext('2d')!
+
+  tempCtx.drawImage(
+    img,
+    -x,
+    -y,
+    270,
+    176,
+    0,
+    0,
+    tileWidth,
+    tileHeight
+  )
+
+  // 뒷면인 경우 주황색 필터 적용
+  if (isBack) {
+    // 주황색 오버레이 (더 진한 주황색)
+    tempCtx.fillStyle = 'rgba(255, 140, 0, 0.55)'
+    tempCtx.fillRect(0, 0, tileWidth, tileHeight)
+    // 밝기 감소
+    tempCtx.fillStyle = 'rgba(0, 0, 0, 0.1)'
+    tempCtx.fillRect(0, 0, tileWidth, tileHeight)
+  }
+
+  // 메인 캔버스에 그리기
+  ctx.drawImage(tempCanvas, posX, 0)
+}
+
+/**
+ * 캔버스에 타일들을 렌더링
+ */
+const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> => {
   const canvas = canvasRef.value || document.createElement('canvas')
   const ctx = canvas.getContext('2d')
   
   if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.')
 
-  // 캔버스 크기 설정
-  const tileWidth = 30
+  // 캔버스 크기 계산
+  let totalWidth = 0
   const tileHeight = 44
-  canvas.width = tiles.length * tileWidth
+  for (const tile of tiles) {
+    if (tile === '_space_') {
+      totalWidth += 16
+    } else {
+      totalWidth += 30
+    }
+  }
+
+  canvas.width = totalWidth
   canvas.height = tileHeight
 
-  // tiles.svg 이미지 로드 및 렌더링
+  // 배경 투명하게 설정
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  // tiles.svg 이미지 로드
   const img = new Image()
   img.src = '/tiles.svg'
-  
+
   return new Promise((resolve, reject) => {
     img.onload = () => {
-      for (let i = 0; i < tiles.length; i++) {
-        const tile = tiles[i]
-        const match = tile.match(/^(\d+)([mpsz])$/)
-        
-        if (!match) {
-          reject(new Error(`Invalid tile: ${tile}`))
-          return
+      let currentX = 0
+      try {
+        for (const tile of tiles) {
+          if (tile === '_space_') {
+            ctx.fillStyle = 'transparent'
+            ctx.fillRect(currentX, 0, 16, tileHeight)
+            currentX += 16
+          } else {
+            renderTileOnCanvas(ctx, img, tile, currentX, 30, tileHeight)
+            currentX += 30
+          }
         }
-
-        const number = parseInt(match[1])
-        const suit = match[2]
-
-        // 배경 위치 계산
-        let y = 0
-        switch (suit) {
-          case 'm': y = 0; break
-          case 'p': y = -44; break
-          case 's': y = -88; break
-          case 'z': y = -132; break
-        }
-        const x = -(number - 1) * 30
-
-        // 캔버스에 이미지 영역 그리기
-        ctx.drawImage(
-          img,
-          -x, // 소스 x
-          -y, // 소스 y
-          canvas.width, // 소스 너비
-          tileHeight, // 소스 높이
-          i * tileWidth, // 대상 x
-          0, // 대상 y
-          tileWidth, // 대상 너비
-          tileHeight // 대상 높이
-        )
+        resolve(canvas)
+      } catch (error) {
+        reject(error)
       }
-      resolve(canvas)
     }
     img.onerror = () => reject(new Error('tiles.svg 로드 실패'))
   }) as any
@@ -176,58 +238,7 @@ const renderTilesToCanvas = (tiles: string[]): HTMLCanvasElement => {
 const copyToClipboard = async (rowIndex: number) => {
   try {
     const tiles = tileRows.value[rowIndex].tiles
-    const canvas = canvasRef.value || document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    
-    if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.')
-
-    const tileWidth = 30
-    const tileHeight = 44
-    canvas.width = tiles.length * tileWidth
-    canvas.height = tileHeight
-
-    const img = new Image()
-    img.src = '/tiles.svg'
-
-    await new Promise((resolve, reject) => {
-      img.onload = () => {
-        for (let i = 0; i < tiles.length; i++) {
-          const tile = tiles[i]
-          const match = tile.match(/^(\d+)([mpsz])$/)
-          
-          if (!match) {
-            reject(new Error(`Invalid tile: ${tile}`))
-            return
-          }
-
-          const number = parseInt(match[1])
-          const suit = match[2]
-
-          let y = 0
-          switch (suit) {
-            case 'm': y = 0; break
-            case 'p': y = -44; break
-            case 's': y = -88; break
-            case 'z': y = -132; break
-          }
-          const x = -(number - 1) * 30
-
-          ctx.drawImage(
-            img,
-            -x,
-            -y,
-            canvas.width,
-            tileHeight,
-            i * tileWidth,
-            0,
-            tileWidth,
-            tileHeight
-          )
-        }
-        resolve(null)
-      }
-      img.onerror = () => reject(new Error('tiles.svg 로드 실패'))
-    })
+    const canvas = await renderTilesToCanvas(tiles)
 
     canvas.toBlob(async (blob) => {
       if (!blob) throw new Error('Blob 생성 실패')
@@ -245,67 +256,16 @@ const copyToClipboard = async (rowIndex: number) => {
 /**
  * 이미지 저장
  */
-const saveTileImage = (rowIndex: number) => {
+const saveTileImage = async (rowIndex: number) => {
   try {
     const tiles = tileRows.value[rowIndex].tiles
-    const canvas = canvasRef.value || document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    
-    if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.')
+    const canvas = await renderTilesToCanvas(tiles)
 
-    const tileWidth = 30
-    const tileHeight = 44
-    canvas.width = tiles.length * tileWidth
-    canvas.height = tileHeight
-
-    const img = new Image()
-    img.src = '/tiles.svg'
-
-    img.onload = () => {
-      for (let i = 0; i < tiles.length; i++) {
-        const tile = tiles[i]
-        const match = tile.match(/^(\d+)([mpsz])$/)
-        
-        if (!match) {
-          errorMessage.value = `Invalid tile: ${tile}`
-          return
-        }
-
-        const number = parseInt(match[1])
-        const suit = match[2]
-
-        let y = 0
-        switch (suit) {
-          case 'm': y = 0; break
-          case 'p': y = -44; break
-          case 's': y = -88; break
-          case 'z': y = -132; break
-        }
-        const x = -(number - 1) * 30
-
-        ctx.drawImage(
-          img,
-          -x,
-          -y,
-          canvas.width,
-          tileHeight,
-          i * tileWidth,
-          0,
-          tileWidth,
-          tileHeight
-        )
-      }
-
-      const link = document.createElement('a')
-      link.href = canvas.toDataURL('image/png')
-      link.download = `mahjong-${tiles.join('')}-${Date.now()}.png`
-      link.click()
-      errorMessage.value = ''
-    }
-
-    img.onerror = () => {
-      errorMessage.value = 'tiles.svg 로드 실패'
-    }
+    const link = document.createElement('a')
+    link.href = canvas.toDataURL('image/png')
+    link.download = `mahjong-${tiles.join('')}-${Date.now()}.png`
+    link.click()
+    errorMessage.value = ''
   } catch (error) {
     errorMessage.value = `저장 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
   }
