@@ -187,18 +187,28 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
   }
 
   if (annotationMap[tile]) {
+    // 어노테이션 색상 맵 (도라: 회색, 쯔모: 노랑, 론: 빨강, 타패: 파랑)
+    const colorMap: Record<string, { bg: string; border: string; text: string }> = {
+      'd': { bg: '#f5f5f5', border: '#9e9e9e', text: '#616161' },
+      '_tsumoannotation_': { bg: '#fff8e1', border: '#fbc02d', text: '#8d6e63' },
+      '_ronannotation_': { bg: '#ffebee', border: '#e53935', text: '#c62828' },
+      '_discardannotation_': { bg: '#e3f2fd', border: '#1e88e5', text: '#1565c0' }
+    }
+    const colors = colorMap[tile] ?? { bg: '#eeeeee', border: '#9e9e9e', text: '#616161' }
+
     // 배경 그리기
-    ctx.fillStyle = '#e8f5e9'
+    ctx.fillStyle = colors.bg
     ctx.fillRect(posX, posY, tileWidth, tileHeight)
     
     // 테두리 그리기
-    ctx.strokeStyle = '#4CAF50'
-    ctx.lineWidth = 2
+    ctx.strokeStyle = colors.border
+    ctx.lineWidth = Math.max(1, Math.floor(tileWidth * 0.02)) // 스케일에 비례한 테두리 두께
     ctx.strokeRect(posX, posY, tileWidth, tileHeight)
     
     // 텍스트 그리기
-    ctx.fillStyle = '#2e7d32'
-    ctx.font = 'bold 10px Arial'
+    ctx.fillStyle = colors.text
+    const fontSize = Math.max(10, Math.floor(tileHeight * 0.22)) // 스케일에 비례한 폰트 크기
+    ctx.font = `bold ${fontSize}px Arial`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(annotationMap[tile], posX + tileWidth / 2, posY + tileHeight / 2)
