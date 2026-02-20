@@ -15,11 +15,22 @@
       <button @click="clearAllTiles" class="clear-btn">초기화</button>
     </div>
 
+    <div class="background-option">
+      <label for="backgroundToggle">
+        <input
+          id="backgroundToggle"
+          v-model="hasBackground"
+          type="checkbox"
+        />
+        배경 포함
+      </label>
+    </div>
+
     <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
 
     <div v-if="tileRows.length > 0" class="tiles-display">
       <h2>입력된 마작패:</h2>
-      <div v-for="(row, rowIndex) in tileRows" :key="rowIndex" class="tile-row">
+      <div v-for="(row, rowIndex) in tileRows" :key="rowIndex" class="tile-row" :style="tileRowStyle">
         <div class="tiles-wrapper">
           <MahjongTile v-for="(tile, tileIndex) in row.tiles" :key="`${rowIndex}-${tileIndex}`" :code="tile" />
         </div>
@@ -67,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import MahjongTile from '../components/MahjongTile.vue'
 import { parseTileString, isTileBack } from '../utils/tileUtils'
 
@@ -79,6 +90,18 @@ const inputCode = ref('')
 const tileRows = ref<TileRow[]>([])
 const errorMessage = ref('')
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const hasBackground = ref(false)
+
+const tileRowStyle = computed(() => {
+  if (!hasBackground.value) {
+    return {}
+  }
+  return {
+    backgroundColor: '#588E58',
+    padding: '20px',
+    borderRadius: '4px'
+  }
+})
 
 const addTiles = () => {
   const code = inputCode.value.toLowerCase().trim()
@@ -111,11 +134,11 @@ const clearAllTiles = () => {
 /**
  * 캔버스에 타일을 렌더링하는 헬퍼 함수
  */
-const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement, tile: string, posX: number, tileWidth: number, tileHeight: number) => {
+const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement, tile: string, posX: number, tileWidth: number, tileHeight: number, posY: number = 0) => {
   // 공간 처리
   if (tile === '_space_') {
     ctx.fillStyle = 'transparent'
-    ctx.fillRect(posX, 0, tileWidth, tileHeight)
+    ctx.fillRect(posX, posY, tileWidth, tileHeight)
     return
   }
 
@@ -180,7 +203,7 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
   }
 
   // 메인 캔버스에 그리기
-  ctx.drawImage(tempCanvas, posX, 0)
+  ctx.drawImage(tempCanvas, posX, posY)
 }
 
 /**
@@ -197,6 +220,7 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
   const tileWidth = 120  // 30 * 4
   const tileHeight = 176 // 44 * 4
   const spaceWidth = 64  // 16 * 4
+  const padding = 20     // 배경 패딩
   
   for (const tile of tiles) {
     if (tile === '_space_') {
@@ -206,11 +230,21 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
     }
   }
 
-  canvas.width = totalWidth
-  canvas.height = tileHeight
+  // 배경이 있으면 패딩 추가
+  const finalWidth = hasBackground.value ? totalWidth + padding * 2 : totalWidth
+  const finalHeight = hasBackground.value ? tileHeight + padding * 2 : tileHeight
 
-  // 배경 투명하게 설정
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  canvas.width = finalWidth
+  canvas.height = finalHeight
+
+  // 배경 그리기 (배경 있음 선택 시)
+  if (hasBackground.value) {
+    ctx.fillStyle = '#588E58'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  } else {
+    // 배경 투명하게 설정
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+  }
 
   // tiles.svg 이미지 로드
   const img = new Image()
@@ -218,15 +252,18 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
 
   return new Promise((resolve, reject) => {
     img.onload = () => {
-      let currentX = 0
+      let currentX = hasBackground.value ? padding : 0
+      const posY = hasBackground.value ? padding : 0
       try {
         for (const tile of tiles) {
           if (tile === '_space_') {
-            ctx.fillStyle = 'transparent'
-            ctx.fillRect(currentX, 0, spaceWidth, tileHeight)
+            if (!hasBackground.value) {
+              ctx.fillStyle = 'transparent'
+              ctx.fillRect(currentX, posY, spaceWidth, tileHeight)
+            }
             currentX += spaceWidth
           } else {
-            renderTileOnCanvas(ctx, img, tile, currentX, tileWidth, tileHeight)
+            renderTileOnCanvas(ctx, img, tile, currentX, tileWidth, tileHeight, posY)
             currentX += tileWidth
           }
         }
@@ -342,6 +379,32 @@ button:hover {
 
 .clear-btn:hover {
   background-color: #da190b;
+}
+
+.background-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+.background-option label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+}
+
+.background-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
 }
 
 .error-message {
