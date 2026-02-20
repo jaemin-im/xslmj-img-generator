@@ -12,17 +12,21 @@
         @keyup.enter="addTiles"
       />
       <button @click="addTiles">추가</button>
-      <button @click="clearTiles" class="clear-btn">초기화</button>
+      <button @click="clearAllTiles" class="clear-btn">초기화</button>
     </div>
 
     <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
 
-    <div v-if="tiles.length > 0" class="tiles-display">
+    <div v-if="tileRows.length > 0" class="tiles-display">
       <h2>입력된 마작패:</h2>
-      <div class="tiles-wrapper">
-        <div v-for="(tile, index) in tiles" :key="index" class="tile-item">
-          <MahjongTile :code="tile" />
-          <button @click="removeTile(index)" class="remove-btn">×</button>
+      <div v-for="(row, rowIndex) in tileRows" :key="rowIndex" class="tile-row">
+        <div class="tiles-wrapper">
+          <MahjongTile v-for="(tile, tileIndex) in row.tiles" :key="`${rowIndex}-${tileIndex}`" :code="tile" />
+        </div>
+        <div class="row-actions">
+          <button @click="copyToClipboard(rowIndex)" class="copy-btn" title="클립보드에 복사">📋</button>
+          <button @click="saveTileImage(rowIndex)" class="save-btn" title="이미지 저장">💾</button>
+          <button @click="deleteRow(rowIndex)" class="delete-row-btn" title="행 삭제">×</button>
         </div>
       </div>
     </div>
@@ -56,6 +60,9 @@
         </div>
       </div>
     </div>
+
+    <!-- 숨겨진 캔버스: 이미지 렌더링용 -->
+    <canvas ref="canvasRef" style="display: none;"></canvas>
   </div>
 </template>
 
@@ -64,9 +71,14 @@ import { ref } from 'vue'
 import MahjongTile from '../components/MahjongTile.vue'
 import { parseTileString } from '../utils/tileUtils'
 
+interface TileRow {
+  tiles: string[]
+}
+
 const inputCode = ref('')
-const tiles = ref<string[]>([])
+const tileRows = ref<TileRow[]>([])
 const errorMessage = ref('')
+const canvasRef = ref<HTMLCanvasElement | null>(null)
 
 const addTiles = () => {
   const code = inputCode.value.toLowerCase().trim()
@@ -77,9 +89,8 @@ const addTiles = () => {
   }
 
   try {
-    // 연달아 입력된 코드를 파싱하여 개별 타일로 변환
     const parsedTiles = parseTileString(code)
-    tiles.value.push(...parsedTiles)
+    tileRows.value.push({ tiles: parsedTiles })
     inputCode.value = ''
     errorMessage.value = ''
   } catch (error) {
@@ -87,14 +98,217 @@ const addTiles = () => {
   }
 }
 
-const removeTile = (index: number) => {
-  tiles.value.splice(index, 1)
+const deleteRow = (rowIndex: number) => {
+  tileRows.value.splice(rowIndex, 1)
 }
 
-const clearTiles = () => {
-  tiles.value = []
+const clearAllTiles = () => {
+  tileRows.value = []
   errorMessage.value = ''
   inputCode.value = ''
+}
+
+/**
+ * 타일 행을 캔버스에 렌더링
+ */
+const renderTilesToCanvas = (tiles: string[]): HTMLCanvasElement => {
+  const canvas = canvasRef.value || document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  
+  if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.')
+
+  // 캔버스 크기 설정
+  const tileWidth = 30
+  const tileHeight = 44
+  canvas.width = tiles.length * tileWidth
+  canvas.height = tileHeight
+
+  // tiles.svg 이미지 로드 및 렌더링
+  const img = new Image()
+  img.src = '/tiles.svg'
+  
+  return new Promise((resolve, reject) => {
+    img.onload = () => {
+      for (let i = 0; i < tiles.length; i++) {
+        const tile = tiles[i]
+        const match = tile.match(/^(\d+)([mpsz])$/)
+        
+        if (!match) {
+          reject(new Error(`Invalid tile: ${tile}`))
+          return
+        }
+
+        const number = parseInt(match[1])
+        const suit = match[2]
+
+        // 배경 위치 계산
+        let y = 0
+        switch (suit) {
+          case 'm': y = 0; break
+          case 'p': y = -44; break
+          case 's': y = -88; break
+          case 'z': y = -132; break
+        }
+        const x = -(number - 1) * 30
+
+        // 캔버스에 이미지 영역 그리기
+        ctx.drawImage(
+          img,
+          -x, // 소스 x
+          -y, // 소스 y
+          canvas.width, // 소스 너비
+          tileHeight, // 소스 높이
+          i * tileWidth, // 대상 x
+          0, // 대상 y
+          tileWidth, // 대상 너비
+          tileHeight // 대상 높이
+        )
+      }
+      resolve(canvas)
+    }
+    img.onerror = () => reject(new Error('tiles.svg 로드 실패'))
+  }) as any
+}
+
+/**
+ * 클립보드에 이미지 복사
+ */
+const copyToClipboard = async (rowIndex: number) => {
+  try {
+    const tiles = tileRows.value[rowIndex].tiles
+    const canvas = canvasRef.value || document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    
+    if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.')
+
+    const tileWidth = 30
+    const tileHeight = 44
+    canvas.width = tiles.length * tileWidth
+    canvas.height = tileHeight
+
+    const img = new Image()
+    img.src = '/tiles.svg'
+
+    await new Promise((resolve, reject) => {
+      img.onload = () => {
+        for (let i = 0; i < tiles.length; i++) {
+          const tile = tiles[i]
+          const match = tile.match(/^(\d+)([mpsz])$/)
+          
+          if (!match) {
+            reject(new Error(`Invalid tile: ${tile}`))
+            return
+          }
+
+          const number = parseInt(match[1])
+          const suit = match[2]
+
+          let y = 0
+          switch (suit) {
+            case 'm': y = 0; break
+            case 'p': y = -44; break
+            case 's': y = -88; break
+            case 'z': y = -132; break
+          }
+          const x = -(number - 1) * 30
+
+          ctx.drawImage(
+            img,
+            -x,
+            -y,
+            canvas.width,
+            tileHeight,
+            i * tileWidth,
+            0,
+            tileWidth,
+            tileHeight
+          )
+        }
+        resolve(null)
+      }
+      img.onerror = () => reject(new Error('tiles.svg 로드 실패'))
+    })
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) throw new Error('Blob 생성 실패')
+      
+      const data = [new ClipboardItem({ 'image/png': blob })]
+      await navigator.clipboard.write(data)
+      errorMessage.value = ''
+      alert('이미지가 클립보드에 복사되었습니다!')
+    })
+  } catch (error) {
+    errorMessage.value = `복사 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
+  }
+}
+
+/**
+ * 이미지 저장
+ */
+const saveTileImage = (rowIndex: number) => {
+  try {
+    const tiles = tileRows.value[rowIndex].tiles
+    const canvas = canvasRef.value || document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    
+    if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.')
+
+    const tileWidth = 30
+    const tileHeight = 44
+    canvas.width = tiles.length * tileWidth
+    canvas.height = tileHeight
+
+    const img = new Image()
+    img.src = '/tiles.svg'
+
+    img.onload = () => {
+      for (let i = 0; i < tiles.length; i++) {
+        const tile = tiles[i]
+        const match = tile.match(/^(\d+)([mpsz])$/)
+        
+        if (!match) {
+          errorMessage.value = `Invalid tile: ${tile}`
+          return
+        }
+
+        const number = parseInt(match[1])
+        const suit = match[2]
+
+        let y = 0
+        switch (suit) {
+          case 'm': y = 0; break
+          case 'p': y = -44; break
+          case 's': y = -88; break
+          case 'z': y = -132; break
+        }
+        const x = -(number - 1) * 30
+
+        ctx.drawImage(
+          img,
+          -x,
+          -y,
+          canvas.width,
+          tileHeight,
+          i * tileWidth,
+          0,
+          tileWidth,
+          tileHeight
+        )
+      }
+
+      const link = document.createElement('a')
+      link.href = canvas.toDataURL('image/png')
+      link.download = `mahjong-${tiles.join('')}-${Date.now()}.png`
+      link.click()
+      errorMessage.value = ''
+    }
+
+    img.onerror = () => {
+      errorMessage.value = 'tiles.svg 로드 실패'
+    }
+  } catch (error) {
+    errorMessage.value = `저장 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
+  }
 }
 </script>
 
@@ -185,31 +399,59 @@ button:hover {
   font-size: 18px;
 }
 
+.tile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: white;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
 .tiles-wrapper {
   display: flex;
   flex-wrap: wrap;
   gap: 0;
+  flex: 1;
 }
 
-.tile-item {
-  position: relative;
-  display: inline-block;
+.row-actions {
+  display: flex;
+  gap: 5px;
 }
 
-.remove-btn {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 24px;
-  height: 24px;
-  padding: 0;
+.copy-btn,
+.save-btn,
+.delete-row-btn {
+  padding: 6px 12px;
+  font-size: 14px;
+  min-width: 40px;
+}
+
+.copy-btn {
+  background-color: #2196F3;
+}
+
+.copy-btn:hover {
+  background-color: #0b7dda;
+}
+
+.save-btn {
+  background-color: #FF9800;
+}
+
+.save-btn:hover {
+  background-color: #e68900;
+}
+
+.delete-row-btn {
   background-color: #f44336;
-  border-radius: 50%;
-  font-size: 16px;
-  line-height: 1;
+  padding: 6px 10px;
 }
 
-.remove-btn:hover {
+.delete-row-btn:hover {
   background-color: #da190b;
 }
 
@@ -244,6 +486,16 @@ button:hover {
   input {
     flex: 1;
     min-width: 0;
+  }
+
+  .tile-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .row-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 
