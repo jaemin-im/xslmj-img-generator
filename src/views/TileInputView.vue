@@ -28,6 +28,13 @@
 
     <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
 
+    <!-- 토스트 알림 -->
+    <transition name="toast">
+      <div v-if="showToast" class="toast" :class="`toast-${toastType}`">
+        {{ toastMessage }}
+      </div>
+    </transition>
+
     <div v-if="tileRows.length > 0" class="tiles-display">
       <h2>입력된 마작패:</h2>
       <div v-for="(row, rowIndex) in tileRows" :key="rowIndex" class="tile-row" :style="tileRowStyle">
@@ -91,6 +98,28 @@ const tileRows = ref<TileRow[]>([])
 const errorMessage = ref('')
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const hasBackground = ref(false)
+
+// 토스트 알림 관련
+const showToast = ref(false)
+const toastMessage = ref('')
+const toastType = ref<'success' | 'error'>('success')
+let toastTimer: NodeJS.Timeout | null = null
+
+const showToastMessage = (message: string, type: 'success' | 'error' = 'success', duration: number = 2000) => {
+  toastMessage.value = message
+  toastType.value = type
+  showToast.value = true
+
+  // 이전 타이머 제거
+  if (toastTimer) {
+    clearTimeout(toastTimer)
+  }
+
+  // 지정된 시간 후 토스트 숨김
+  toastTimer = setTimeout(() => {
+    showToast.value = false
+  }, duration)
+}
 
 const tileRowStyle = computed(() => {
   if (!hasBackground.value) {
@@ -290,10 +319,12 @@ const copyToClipboard = async (rowIndex: number) => {
       const data = [new ClipboardItem({ 'image/png': blob })]
       await navigator.clipboard.write(data)
       errorMessage.value = ''
-      alert('이미지가 클립보드에 복사되었습니다!')
+      showToastMessage('이미지가 클립보드에 복사되었습니다!', 'success')
     })
   } catch (error) {
-    errorMessage.value = `복사 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
+    const errorMsg = `복사 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
+    errorMessage.value = errorMsg
+    showToastMessage(errorMsg, 'error')
   }
 }
 
@@ -539,5 +570,45 @@ button:hover {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
+}
+
+/* 토스트 알림 스타일 */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 16px 24px;
+  background-color: #4CAF50;
+  color: white;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 14px;
+  z-index: 1000;
+  max-width: 400px;
+  word-break: break-word;
+}
+
+.toast-success {
+  background-color: #4CAF50;
+}
+
+.toast-error {
+  background-color: #f44336;
+}
+
+/* 토스트 애니메이션 */
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from {
+  transform: translateX(400px);
+  opacity: 0;
+}
+
+.toast-leave-to {
+  transform: translateX(400px);
+  opacity: 0;
 }
 </style>
