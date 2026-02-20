@@ -21,9 +21,12 @@ const tileStyle = computed(() => {
       backgroundImage: 'url(/tiles.svg)',
       backgroundPosition: backgroundPosition,
       backgroundRepeat: 'no-repeat',
+      backgroundSize: '270px 176px',
       width: '30px',
       height: '44px',
-      display: 'inline-block'
+      display: 'inline-block',
+      margin: '0',
+      padding: '0'
     }
   } catch (error) {
     console.error(error)
@@ -31,7 +34,9 @@ const tileStyle = computed(() => {
       width: '30px',
       height: '44px',
       display: 'inline-block',
-      backgroundColor: '#ccc'
+      backgroundColor: '#ccc',
+      margin: '0',
+      padding: '0'
     }
   }
 })

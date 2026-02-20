@@ -3,16 +3,15 @@
     <h1>마작패 이미지 생성기</h1>
     
     <div class="input-section">
-      <label for="tileCode">마작패 코드 입력 (예: 1m, 5p, 3s, 7z):</label>
+      <label for="tileCode">마작패 코드 입력 (예: 123m35678p12399s):</label>
       <input
         id="tileCode"
         v-model="inputCode"
         type="text"
-        placeholder="1m, 2p, 3s, 4z 등"
-        @keyup.enter="addTile"
-        maxlength="3"
+        placeholder="123m35678p12399s 등"
+        @keyup.enter="addTiles"
       />
-      <button @click="addTile">추가</button>
+      <button @click="addTiles">추가</button>
       <button @click="clearTiles" class="clear-btn">초기화</button>
     </div>
 
@@ -63,13 +62,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import MahjongTile from '../components/MahjongTile.vue'
-import { getTilePosition } from '../utils/tileUtils'
+import { parseTileString } from '../utils/tileUtils'
 
 const inputCode = ref('')
 const tiles = ref<string[]>([])
 const errorMessage = ref('')
 
-const addTile = () => {
+const addTiles = () => {
   const code = inputCode.value.toLowerCase().trim()
   
   if (!code) {
@@ -78,13 +77,13 @@ const addTile = () => {
   }
 
   try {
-    // 유효성 검사 - getTilePosition 함수를 사용해 유효한 코드인지 확인
-    getTilePosition(code)
-    tiles.value.push(code)
+    // 연달아 입력된 코드를 파싱하여 개별 타일로 변환
+    const parsedTiles = parseTileString(code)
+    tiles.value.push(...parsedTiles)
     inputCode.value = ''
     errorMessage.value = ''
   } catch (error) {
-    errorMessage.value = `유효하지 않은 코드입니다: ${code} (형식: 1m~9m, 1p~9p, 1s~9s, 1z~7z)`
+    errorMessage.value = `입력 오류: ${error instanceof Error ? error.message : '올바른 형식이 아닙니다.'}`
   }
 }
 
@@ -189,7 +188,7 @@ button:hover {
 .tiles-wrapper {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 0;
 }
 
 .tile-item {

@@ -60,3 +60,52 @@ export function getTileBackgroundPosition(code: string): string {
   const pos = getTilePosition(code);
   return `${pos.x}px ${pos.y}px`;
 }
+
+/**
+ * 연달아 입력된 마작패 코드를 파싱하여 개별 타일 코드 배열로 변환
+ * 예: '123m35678p12399s' -> ['1m', '2m', '3m', '3p', '5p', '6p', '7p', '8p', '1s', '2s', '3s', '9s', '9s']
+ * @param input 연달아 입력된 마작패 코드 문자열
+ * @returns 개별 타일 코드 배열
+ */
+export function parseTileString(input: string): string[] {
+  const tiles: string[] = [];
+  let currentNumbers = '';
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i].toLowerCase();
+
+    if (/\d/.test(char)) {
+      // 숫자인 경우 누적
+      currentNumbers += char;
+    } else if (/[mpsz]/.test(char)) {
+      // 마작패 종류 문자인 경우
+      if (!currentNumbers) {
+        throw new Error(`코드 오류: ${char} 앞에 숫자가 없습니다.`);
+      }
+
+      // 현재까지 누적된 숫자들을 각각의 타일로 변환
+      for (const digit of currentNumbers) {
+        const number = parseInt(digit);
+        const tileCode = `${number}${char}`;
+
+        // 유효성 검사
+        try {
+          getTilePosition(tileCode);
+          tiles.push(tileCode);
+        } catch (error) {
+          throw new Error(`유효하지 않은 타일 코드: ${tileCode}`);
+        }
+      }
+
+      currentNumbers = '';
+    } else {
+      throw new Error(`허용되지 않는 문자: ${char}`);
+    }
+  }
+
+  if (currentNumbers) {
+    throw new Error(`코드 오류: 끝에 숫자만 있고 종류(m, p, s, z)가 없습니다.`);
+  }
+
+  return tiles;
+}
