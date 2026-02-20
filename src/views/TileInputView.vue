@@ -115,7 +115,7 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
   // 공간 처리
   if (tile === '_space_') {
     ctx.fillStyle = 'transparent'
-    ctx.fillRect(posX, 0, 16, tileHeight)
+    ctx.fillRect(posX, 0, tileWidth, tileHeight)
     return
   }
 
@@ -161,12 +161,12 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
     img,
     srcX,        // 소스 x 좌표
     srcY,        // 소스 y 좌표
-    tileWidth,   // 소스에서 가져올 너비 (30)
-    tileHeight,  // 소스에서 가져올 높이 (44)
+    30,          // 소스에서 가져올 너비 (원본 30px)
+    44,          // 소스에서 가져올 높이 (원본 44px)
     0,           // 대상 x 좌표
     0,           // 대상 y 좌표
-    tileWidth,   // 대상 너비 (30)
-    tileHeight   // 대상 높이 (44)
+    tileWidth,   // 대상 너비 (확대된 크기)
+    tileHeight   // 대상 높이 (확대된 크기)
   )
 
   // 뒷면인 경우 주황색 필터 적용
@@ -192,14 +192,17 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
   
   if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.')
 
-  // 캔버스 크기 계산
+  // 캔버스 크기 계산 (4배)
   let totalWidth = 0
-  const tileHeight = 44
+  const tileWidth = 120  // 30 * 4
+  const tileHeight = 176 // 44 * 4
+  const spaceWidth = 64  // 16 * 4
+  
   for (const tile of tiles) {
     if (tile === '_space_') {
-      totalWidth += 16
+      totalWidth += spaceWidth
     } else {
-      totalWidth += 30
+      totalWidth += tileWidth
     }
   }
 
@@ -220,11 +223,11 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
         for (const tile of tiles) {
           if (tile === '_space_') {
             ctx.fillStyle = 'transparent'
-            ctx.fillRect(currentX, 0, 16, tileHeight)
-            currentX += 16
+            ctx.fillRect(currentX, 0, spaceWidth, tileHeight)
+            currentX += spaceWidth
           } else {
-            renderTileOnCanvas(ctx, img, tile, currentX, 30, tileHeight)
-            currentX += 30
+            renderTileOnCanvas(ctx, img, tile, currentX, tileWidth, tileHeight)
+            currentX += tileWidth
           }
         }
         resolve(canvas)
