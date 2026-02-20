@@ -153,16 +153,20 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
   tempCanvas.height = tileHeight
   const tempCtx = tempCanvas.getContext('2d')!
 
+  // 소스 이미지에서 정확한 타일 영역 추출
+  const srcX = Math.abs(x)
+  const srcY = Math.abs(y)
+  
   tempCtx.drawImage(
     img,
-    -x,
-    -y,
-    270,
-    176,
-    0,
-    0,
-    tileWidth,
-    tileHeight
+    srcX,        // 소스 x 좌표
+    srcY,        // 소스 y 좌표
+    tileWidth,   // 소스에서 가져올 너비 (30)
+    tileHeight,  // 소스에서 가져올 높이 (44)
+    0,           // 대상 x 좌표
+    0,           // 대상 y 좌표
+    tileWidth,   // 대상 너비 (30)
+    tileHeight   // 대상 높이 (44)
   )
 
   // 뒷면인 경우 주황색 필터 적용

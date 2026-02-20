@@ -51,7 +51,7 @@ const tileStyle = computed(() => {
       display: 'inline-block',
       margin: '0',
       padding: '0',
-      filter: isBack ? 'invert(0.1) sepia(0.8) hue-rotate(15deg) saturate(2) brightness(0.95)' : 'none'
+      filter: isBack ? 'invert(0.3) sepia(1) hue-rotate(15deg) saturate(5) brightness(0.95)' : 'none'
     }
   } catch (error) {
     console.error(error)
@@ -74,9 +74,5 @@ const tileStyle = computed(() => {
 
 .space {
   background-color: transparent;
-}
-
-.back {
-  filter: invert(0.1) sepia(0.8) hue-rotate(15deg) saturate(2) brightness(0.95);
 }
 </style>
