@@ -163,11 +163,45 @@ const clearAllTiles = () => {
 /**
  * 캔버스에 타일을 렌더링하는 헬퍼 함수
  */
-const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement, tile: string, posX: number, tileWidth: number, tileHeight: number, posY: number = 0) => {
+const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement, tile: string, posX: number, tileWidth: number, tileHeight: number, posY: number = 0, rotated: boolean = false) => {
   // 공간 처리
   if (tile === '_space_') {
     ctx.fillStyle = 'transparent'
     ctx.fillRect(posX, posY, tileWidth, tileHeight)
+    return
+  }
+
+  // 90도 회전 마크 처리
+  if (tile === '_rotate90_') {
+    ctx.fillStyle = 'transparent'
+    ctx.fillRect(posX, posY, tileWidth, tileHeight)
+    return
+  }
+
+  // 어노테이션 처리 (d, _tsumoannotation_, _ronannotation_, _discardannotation_)
+  const annotationMap: Record<string, string> = {
+    'd': '도라',
+    '_tsumoannotation_': '쯔모',
+    '_ronannotation_': '론',
+    '_discardannotation_': '打'
+  }
+
+  if (annotationMap[tile]) {
+    // 배경 그리기
+    ctx.fillStyle = '#e8f5e9'
+    ctx.fillRect(posX, posY, tileWidth, tileHeight)
+    
+    // 테두리 그리기
+    ctx.strokeStyle = '#4CAF50'
+    ctx.lineWidth = 2
+    ctx.strokeRect(posX, posY, tileWidth, tileHeight)
+    
+    // 텍스트 그리기
+    ctx.fillStyle = '#2e7d32'
+    ctx.font = 'bold 10px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(annotationMap[tile], posX + tileWidth / 2, posY + tileHeight / 2)
     return
   }
 
@@ -231,8 +265,17 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
     tempCtx.fillRect(0, 0, tileWidth, tileHeight)
   }
 
-  // 메인 캔버스에 그리기
-  ctx.drawImage(tempCanvas, posX, posY)
+  // 회전 적용
+  if (rotated) {
+    ctx.save()
+    ctx.translate(posX + tileWidth / 2, posY + tileHeight / 2)
+    ctx.rotate((90 * Math.PI) / 180)
+    ctx.drawImage(tempCanvas, -tileWidth / 2, -tileHeight / 2)
+    ctx.restore()
+  } else {
+    // 메인 캔버스에 그리기
+    ctx.drawImage(tempCanvas, posX, posY)
+  }
 }
 
 /**
@@ -284,7 +327,19 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
       let currentX = hasBackground.value ? padding : 0
       const posY = hasBackground.value ? padding : 0
       try {
-        for (const tile of tiles) {
+        let nextTileRotated = false
+        
+        for (let i = 0; i < tiles.length; i++) {
+          const tile = tiles[i]
+          const currentRotated = nextTileRotated
+          nextTileRotated = false
+          
+          if (tile === '_rotate90_') {
+            // 다음 타일을 회전 표시
+            nextTileRotated = true
+            continue
+          }
+          
           if (tile === '_space_') {
             if (!hasBackground.value) {
               ctx.fillStyle = 'transparent'
@@ -292,7 +347,7 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
             }
             currentX += spaceWidth
           } else {
-            renderTileOnCanvas(ctx, img, tile, currentX, tileWidth, tileHeight, posY)
+            renderTileOnCanvas(ctx, img, tile, currentX, tileWidth, tileHeight, posY, currentRotated)
             currentX += tileWidth
           }
         }
@@ -474,6 +529,7 @@ button:hover {
 .tiles-wrapper {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0;
   flex: 1;
 }
