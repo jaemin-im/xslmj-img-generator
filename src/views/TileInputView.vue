@@ -501,7 +501,7 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
           if (width === undefined) continue
           
           const annotationTiles = ['d', '_tsumoannotation_', '_ronannotation_', '_discardannotation_']
-          const rightMargin = annotationTiles.includes(tile) ? 10 : 0
+          const rightMargin = annotationTiles.includes(tile) ? 12 : 0
           
           if (tile === '_space_') {
             if (!hasBackground.value) {
