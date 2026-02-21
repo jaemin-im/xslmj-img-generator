@@ -257,6 +257,43 @@ const generateAllImages = async () => {
 }
 
 /**
+ * 각 타일이 필요로 하는 너비 계산
+ */
+const calculateTileWidth = (tile: string, ctx: CanvasRenderingContext2D): number => {
+  const tileWidth = 120
+  const spaceWidth = 64
+
+  if (tile === '_space_') {
+    return spaceWidth
+  }
+
+  if (tile === '_rotate90_') {
+    return 0
+  }
+
+  // 어노테이션 텍스트
+  const annotationMap: Record<string, string> = {
+    'd': '도라',
+    '_tsumoannotation_': '쯔모',
+    '_ronannotation_': '론',
+    '_discardannotation_': '打'
+  }
+
+  if (annotationMap[tile]) {
+    const text = annotationMap[tile]
+    const fontSize = 32
+    ctx.font = `bold ${fontSize}px Arial`
+    const metrics = ctx.measureText(text)
+    const textWidth = metrics.width
+    const padding = 24
+    return Math.max(80, textWidth + padding)
+  }
+
+  // 일반 타일
+  return tileWidth
+}
+
+/**
  * 캔버스에 타일을 렌더링하는 헬퍼 함수
  */
 const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement, tile: string, posX: number, tileWidth: number, tileHeight: number, posY: number = 0, rotated: boolean = false) => {
@@ -292,22 +329,29 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
     }
     const colors = colorMap[tile] ?? { bg: '#eeeeee', border: '#9e9e9e', text: '#616161' }
 
+    // 어노테이션 박스의 높이를 텍스트 크기에 맞춰서 동적 계산
+    const fontSize = 32
+    ctx.font = `bold ${fontSize}px Arial`
+    const padding = 12
+    const annotationHeight = fontSize + padding * 2
+    
+    // 박스를 수직 중앙에 배치
+    const boxPosY = posY + (tileHeight - annotationHeight) / 2
+
     // 배경 그리기
     ctx.fillStyle = colors.bg
-    ctx.fillRect(posX, posY, tileWidth, tileHeight)
+    ctx.fillRect(posX, boxPosY, tileWidth, annotationHeight)
     
     // 테두리 그리기
     ctx.strokeStyle = colors.border
-    ctx.lineWidth = Math.max(1, Math.floor(tileWidth * 0.02)) // 스케일에 비례한 테두리 두께
-    ctx.strokeRect(posX, posY, tileWidth, tileHeight)
+    ctx.lineWidth = Math.max(1, Math.floor(annotationHeight * 0.1))
+    ctx.strokeRect(posX, boxPosY, tileWidth, annotationHeight)
     
     // 텍스트 그리기
     ctx.fillStyle = colors.text
-    const fontSize = Math.max(10, Math.floor(tileHeight * 0.22)) // 스케일에 비례한 폰트 크기
-    ctx.font = `bold ${fontSize}px Arial`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(annotationMap[tile], posX + tileWidth / 2, posY + tileHeight / 2)
+    ctx.fillText(annotationMap[tile], posX + tileWidth / 2, boxPosY + annotationHeight / 2)
     return
   }
 
@@ -393,18 +437,23 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
   
   if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.')
 
-  // 캔버스 크기 계산 (4배)
-  let totalWidth = 0
-  const tileWidth = 120  // 30 * 4
+  // 캔버스 크기 계산
   const tileHeight = 176 // 44 * 4
-  const spaceWidth = 64  // 16 * 4
   const padding = 20     // 배경 패딩
   
+  // 첫 번째 패스: 각 타일의 너비 계산
+  const tileWidths: number[] = []
+  let totalWidth = 0
+  const annotationTiles = ['d', '_tsumoannotation_', '_ronannotation_', '_discardannotation_']
+  
   for (const tile of tiles) {
-    if (tile === '_space_') {
-      totalWidth += spaceWidth
+    if (tile === '_rotate90_') {
+      tileWidths.push(0)
     } else {
-      totalWidth += tileWidth
+      const width = calculateTileWidth(tile, ctx)
+      tileWidths.push(width)
+      const rightMargin = annotationTiles.includes(tile) ? 4 : 0
+      totalWidth += width + rightMargin
     }
   }
 
@@ -448,15 +497,21 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
             continue
           }
           
+          const width = tileWidths[i]
+          if (width === undefined) continue
+          
+          const annotationTiles = ['d', '_tsumoannotation_', '_ronannotation_', '_discardannotation_']
+          const rightMargin = annotationTiles.includes(tile) ? 10 : 0
+          
           if (tile === '_space_') {
             if (!hasBackground.value) {
               ctx.fillStyle = 'transparent'
-              ctx.fillRect(currentX, posY, spaceWidth, tileHeight)
+              ctx.fillRect(currentX, posY, width, tileHeight)
             }
-            currentX += spaceWidth
+            currentX += width
           } else {
-            renderTileOnCanvas(ctx, img, tile, currentX, tileWidth, tileHeight, posY, currentRotated)
-            currentX += tileWidth
+            renderTileOnCanvas(ctx, img, tile, currentX, width, tileHeight, posY, currentRotated)
+            currentX += width + rightMargin
           }
         }
         resolve(canvas)
