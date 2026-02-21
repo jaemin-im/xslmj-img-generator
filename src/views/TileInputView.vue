@@ -445,6 +445,7 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
   const tileWidths: number[] = []
   let totalWidth = 0
   const annotationTiles = ['d', '_tsumoannotation_', '_ronannotation_', '_discardannotation_']
+  const annotationMargin = 12
   
   for (const tile of tiles) {
     if (tile === '_rotate90_') {
@@ -452,7 +453,7 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
     } else {
       const width = calculateTileWidth(tile, ctx)
       tileWidths.push(width)
-      const rightMargin = annotationTiles.includes(tile) ? 4 : 0
+      const rightMargin = annotationTiles.includes(tile) ? annotationMargin : 0
       totalWidth += width + rightMargin
     }
   }
@@ -500,8 +501,7 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
           const width = tileWidths[i]
           if (width === undefined) continue
           
-          const annotationTiles = ['d', '_tsumoannotation_', '_ronannotation_', '_discardannotation_']
-          const rightMargin = annotationTiles.includes(tile) ? 12 : 0
+          const rightMargin = annotationTiles.includes(tile) ? annotationMargin : 0
           
           if (tile === '_space_') {
             if (!hasBackground.value) {
