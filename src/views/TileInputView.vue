@@ -2,16 +2,36 @@
   <div class="tile-input-container">
     <h1>마작패 이미지 생성기</h1>
     
-    <div class="input-section">
-      <label for="tileCode">마작패 코드 입력 (예: 123m35678p12399s o 5p):</label>
-      <input
-        id="tileCode"
-        v-model="inputCode"
-        type="text"
-        placeholder="123m35678p12399s, o (뒷면), 띄어쓰기 등"
-        @keyup.enter="addTiles"
-      />
-      <button @click="addTiles">추가</button>
+    <!-- 입력 폼 개수 조절 섹션 -->
+    <div class="form-count-section">
+      <label>입력 폼 개수:</label>
+      <div class="form-count-controls">
+        <button @click="decreaseFormCount" class="count-btn" :disabled="inputForms.length <= 1">−</button>
+        <span class="form-count-display">{{ inputForms.length }}</span>
+        <button @click="increaseFormCount" class="count-btn" :disabled="inputForms.length >= 10">+</button>
+      </div>
+    </div>
+    
+    <!-- 여러 개의 마작패 입력 폼 -->
+    <div class="input-forms">
+      <div v-for="(form, index) in inputForms" :key="index" class="input-form">
+        <span class="form-number">#{{ index + 1 }}</span>
+        <input
+          v-model="form.code"
+          type="text"
+          placeholder="123m35678p12399s, o (뒷면), 띄어쓰기 등"
+          @keyup.enter="generateSingleImage(index)"
+          class="form-input"
+        />
+        <button @click="generateSingleImage(index)" class="gen-single-btn">생성</button>
+      </div>
+    </div>
+    
+    <!-- 일괄 생성 버튼 섹션 -->
+    <div class="batch-section">
+      <button @click="generateAllImages" class="batch-btn" :disabled="inputForms.every(f => !f.code.trim())">
+        모든 이미지 일괄 생성
+      </button>
       <button @click="clearAllTiles" class="clear-btn">초기화</button>
     </div>
 
@@ -35,17 +55,26 @@
       </div>
     </transition>
 
-    <div v-if="tileRows.length > 0" class="tiles-display">
-      <h2>입력된 마작패:</h2>
-      <div v-for="(row, rowIndex) in tileRows" :key="rowIndex" class="tile-row" :style="tileRowStyle">
-        <div class="tiles-wrapper">
-          <MahjongTile v-for="(tile, tileIndex) in row.tiles" :key="`${rowIndex}-${tileIndex}`" :code="tile" />
+    <!-- 생성된 이미지 표시 -->
+    <div v-if="generatedImages.length > 0" class="images-display">
+      <h2>생성된 이미지:</h2>
+      <div class="images-grid">
+        <div v-for="(image, index) in generatedImages" :key="index" class="image-item">
+          <div class="image-header">
+            <span class="image-number">#{{ index + 1 }}</span>
+            <span class="image-code">{{ image.code }}</span>
+          </div>
+          <div class="image-preview-wrapper">
+            <img :src="image.dataUrl" :alt="`Generated image ${index + 1}`" class="image-preview" />
+          </div>
+          <div class="image-actions">
+            <button @click="copyImageToClipboard(index)" class="copy-btn" title="클립보드에 복사">📋 복사</button>
+            <button @click="saveSingleImage(index)" class="save-btn" title="이미지 저장">💾 저장</button>
+          </div>
         </div>
-        <div class="row-actions">
-          <button @click="copyToClipboard(rowIndex)" class="copy-btn" title="클립보드에 복사">📋</button>
-          <button @click="saveTileImage(rowIndex)" class="save-btn" title="이미지 저장">💾</button>
-          <button @click="deleteRow(rowIndex)" class="delete-row-btn" title="행 삭제">×</button>
-        </div>
+      </div>
+      <div class="batch-download-section">
+        <button @click="downloadAllImages" class="download-all-btn">모든 이미지 일괄 다운로드</button>
       </div>
     </div>
 
@@ -85,16 +114,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import MahjongTile from '../components/MahjongTile.vue'
-import { parseTileString, isTileBack } from '../utils/tileUtils'
+import { parseTileString } from '../utils/tileUtils'
 
-interface TileRow {
+interface InputForm {
+  code: string
+}
+
+interface GeneratedImage {
+  code: string
+  dataUrl: string
   tiles: string[]
 }
 
-const inputCode = ref('')
-const tileRows = ref<TileRow[]>([])
+const inputForms = ref<InputForm[]>([{ code: '' }])
+const generatedImages = ref<GeneratedImage[]>([])
 const errorMessage = ref('')
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const hasBackground = ref(false)
@@ -103,7 +138,7 @@ const hasBackground = ref(false)
 const showToast = ref(false)
 const toastMessage = ref('')
 const toastType = ref<'success' | 'error'>('success')
-let toastTimer: NodeJS.Timeout | null = null
+let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 const showToastMessage = (message: string, type: 'success' | 'error' = 'success', duration: number = 2000) => {
   toastMessage.value = message
@@ -121,19 +156,32 @@ const showToastMessage = (message: string, type: 'success' | 'error' = 'success'
   }, duration)
 }
 
-const tileRowStyle = computed(() => {
-  if (!hasBackground.value) {
-    return {}
+/**
+ * 입력 폼 개수 증가
+ */
+const increaseFormCount = () => {
+  if (inputForms.value.length < 10) {
+    inputForms.value.push({ code: '' })
   }
-  return {
-    backgroundColor: '#588E58',
-    padding: '20px',
-    borderRadius: '4px'
-  }
-})
+}
 
-const addTiles = () => {
-  const code = inputCode.value.toLowerCase().trim()
+/**
+ * 입력 폼 개수 감소
+ */
+const decreaseFormCount = () => {
+  if (inputForms.value.length > 1) {
+    inputForms.value.pop()
+  }
+}
+
+/**
+ * 단일 이미지 생성
+ */
+const generateSingleImage = (formIndex: number) => {
+  const form = inputForms.value[formIndex]
+  if (!form) return
+  
+  const code = form.code.toLowerCase().trim()
   
   if (!code) {
     errorMessage.value = '마작패 코드를 입력하세요.'
@@ -142,22 +190,70 @@ const addTiles = () => {
 
   try {
     const parsedTiles = parseTileString(code)
-    tileRows.value.push({ tiles: parsedTiles })
-    inputCode.value = ''
+    // 기존 같은 코드의 이미지가 있으면 제거
+    generatedImages.value = generatedImages.value.filter(img => img.code !== code)
     errorMessage.value = ''
+    
+    // 비동기로 이미지 생성
+    renderTilesToCanvas(parsedTiles).then((canvas) => {
+      const dataUrl = canvas.toDataURL('image/png')
+      generatedImages.value.push({
+        code,
+        dataUrl,
+        tiles: parsedTiles
+      })
+      showToastMessage(`이미지 #${formIndex + 1} 생성 완료`, 'success')
+    }).catch((error) => {
+      errorMessage.value = `생성 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
+      showToastMessage(errorMessage.value, 'error')
+    })
   } catch (error) {
     errorMessage.value = `입력 오류: ${error instanceof Error ? error.message : '올바른 형식이 아닙니다.'}`
+    showToastMessage(errorMessage.value, 'error')
   }
 }
 
-const deleteRow = (rowIndex: number) => {
-  tileRows.value.splice(rowIndex, 1)
-}
+/**
+ * 모든 이미지 일괄 생성
+ */
+const generateAllImages = async () => {
+  // 유효한 입력값만 필터링
+  const validForms = inputForms.value.filter(f => f && f.code.trim())
+  
+  if (validForms.length === 0) {
+    errorMessage.value = '최소 1개의 마작패 코드를 입력하세요.'
+    showToastMessage(errorMessage.value, 'error')
+    return
+  }
 
-const clearAllTiles = () => {
-  tileRows.value = []
+  generatedImages.value = []
   errorMessage.value = ''
-  inputCode.value = ''
+
+  try {
+    const newImages: GeneratedImage[] = []
+    
+    for (let i = 0; i < validForms.length; i++) {
+      const form = validForms[i]
+      if (!form) continue
+      
+      const code = form.code.toLowerCase().trim()
+      const parsedTiles = parseTileString(code)
+      const canvas = await renderTilesToCanvas(parsedTiles)
+      const dataUrl = canvas.toDataURL('image/png')
+      
+      newImages.push({
+        code,
+        dataUrl,
+        tiles: parsedTiles
+      })
+    }
+    
+    generatedImages.value = newImages
+    showToastMessage(`${newImages.length}개의 이미지 생성 완료`, 'success')
+  } catch (error) {
+    errorMessage.value = `생성 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
+    showToastMessage(errorMessage.value, 'error')
+  }
 }
 
 /**
@@ -226,8 +322,8 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
     isBack = true
     number = 5
     suit = 'z'
-  } else if (match) {
-    number = parseInt(match[1])
+  } else if (match && match[1] && match[2]) {
+    number = parseInt(match[1], 10)
     suit = match[2]
   } else {
     throw new Error(`Invalid tile: ${tile}`)
@@ -341,6 +437,8 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
         
         for (let i = 0; i < tiles.length; i++) {
           const tile = tiles[i]
+          if (!tile) continue
+          
           const currentRotated = nextTileRotated
           nextTileRotated = false
           
@@ -373,19 +471,17 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
 /**
  * 클립보드에 이미지 복사
  */
-const copyToClipboard = async (rowIndex: number) => {
+const copyImageToClipboard = async (imageIndex: number) => {
   try {
-    const tiles = tileRows.value[rowIndex].tiles
-    const canvas = await renderTilesToCanvas(tiles)
-
-    canvas.toBlob(async (blob) => {
-      if (!blob) throw new Error('Blob 생성 실패')
-      
-      const data = [new ClipboardItem({ 'image/png': blob })]
-      await navigator.clipboard.write(data)
-      errorMessage.value = ''
-      showToastMessage('이미지가 클립보드에 복사되었습니다!', 'success')
-    })
+    const image = generatedImages.value[imageIndex]
+    if (!image) throw new Error('이미지를 찾을 수 없습니다.')
+    
+    const blob = await (await fetch(image.dataUrl)).blob()
+    
+    const data = [new ClipboardItem({ 'image/png': blob })]
+    await navigator.clipboard.write(data)
+    errorMessage.value = ''
+    showToastMessage('이미지가 클립보드에 복사되었습니다!', 'success')
   } catch (error) {
     const errorMsg = `복사 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
     errorMessage.value = errorMsg
@@ -394,27 +490,70 @@ const copyToClipboard = async (rowIndex: number) => {
 }
 
 /**
- * 이미지 저장
+ * 단일 이미지 저장
  */
-const saveTileImage = async (rowIndex: number) => {
+const saveSingleImage = async (imageIndex: number) => {
   try {
-    const tiles = tileRows.value[rowIndex].tiles
-    const canvas = await renderTilesToCanvas(tiles)
-
+    const image = generatedImages.value[imageIndex]
+    if (!image) throw new Error('이미지를 찾을 수 없습니다.')
+    
     const link = document.createElement('a')
-    link.href = canvas.toDataURL('image/png')
-    link.download = `mahjong-${tiles.join('')}-${Date.now()}.png`
+    link.href = image.dataUrl
+    link.download = `mahjong-${image.code}-${Date.now()}.png`
     link.click()
     errorMessage.value = ''
   } catch (error) {
     errorMessage.value = `저장 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
+    showToastMessage(errorMessage.value, 'error')
   }
+}
+
+/**
+ * 모든 이미지 일괄 다운로드 (ZIP 형식)
+ */
+const downloadAllImages = async () => {
+  if (generatedImages.value.length === 0) {
+    showToastMessage('다운로드할 이미지가 없습니다.', 'error')
+    return
+  }
+
+  try {
+    // 간단한 방법: 각 이미지를 개별로 다운로드
+    for (let i = 0; i < generatedImages.value.length; i++) {
+      const image = generatedImages.value[i]
+      if (!image) continue
+      
+      const link = document.createElement('a')
+      link.href = image.dataUrl
+      link.download = `mahjong-${image.code}-${i + 1}.png`
+      
+      // 약간의 딜레이를 두고 다운로드
+      setTimeout(() => {
+        link.click()
+      }, i * 200)
+    }
+    
+    showToastMessage(`${generatedImages.value.length}개의 이미지 다운로드 시작`, 'success')
+  } catch (error) {
+    const errorMsg = `다운로드 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
+    errorMessage.value = errorMsg
+    showToastMessage(errorMsg, 'error')
+  }
+}
+
+/**
+ * 전체 초기화
+ */
+const clearAllTiles = () => {
+  inputForms.value = [{ code: '' }]
+  generatedImages.value = []
+  errorMessage.value = ''
 }
 </script>
 
 <style scoped>
 .tile-input-container {
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 20px;
   font-family: Arial, sans-serif;
@@ -426,36 +565,129 @@ h1 {
   margin-bottom: 30px;
 }
 
-.input-section {
+/* 입력 폼 개수 조절 */
+.form-count-section {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
   align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f0f0f0;
+  border-radius: 6px;
 }
 
-label {
+.form-count-section label {
   font-weight: bold;
-  color: #555;
+  color: #333;
 }
 
-input {
+.form-count-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.count-btn {
+  padding: 6px 12px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: background-color 0.3s;
+  min-width: 40px;
+}
+
+.count-btn:hover:not(:disabled) {
+  background-color: #45a049;
+}
+
+.count-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.form-count-display {
+  min-width: 30px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+/* 여러 입력 폼 */
+.input-forms {
+  margin-bottom: 20px;
+  padding: 20px;
+  background-color: #f5f5f5;
+  border-radius: 6px;
+}
+
+.input-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.input-form:last-child {
+  margin-bottom: 0;
+}
+
+.form-number {
+  font-weight: bold;
+  color: #666;
+  min-width: 40px;
+}
+
+.form-input {
+  flex: 1;
   padding: 8px 12px;
   border: 1px solid #ddd;
   border-radius: 4px;
-  font-size: 16px;
-  flex: 0 0 150px;
+  font-size: 14px;
 }
 
-input:focus {
+.form-input:focus {
   outline: none;
   border-color: #4CAF50;
   box-shadow: 0 0 5px rgba(76, 175, 80, 0.3);
 }
 
-button {
+.gen-single-btn {
   padding: 8px 16px;
-  background-color: #4CAF50;
+  background-color: #2196F3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: background-color 0.3s;
+  white-space: nowrap;
+}
+
+.gen-single-btn:hover {
+  background-color: #0b7dda;
+}
+
+/* 일괄 처리 섹션 */
+.batch-section {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  justify-content: center;
+}
+
+.batch-btn {
+  padding: 12px 24px;
+  background-color: #FF9800;
   color: white;
   border: none;
   border-radius: 4px;
@@ -465,18 +697,32 @@ button {
   transition: background-color 0.3s;
 }
 
-button:hover {
-  background-color: #45a049;
+.batch-btn:hover:not(:disabled) {
+  background-color: #e68900;
+}
+
+.batch-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
 }
 
 .clear-btn {
+  padding: 12px 24px;
   background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  transition: background-color 0.3s;
 }
 
 .clear-btn:hover {
   background-color: #da190b;
 }
 
+/* 배경 옵션 */
 .background-option {
   display: flex;
   align-items: center;
@@ -503,6 +749,7 @@ button:hover {
   cursor: pointer;
 }
 
+/* 에러 메시지 */
 .error-message {
   padding: 12px;
   background-color: #ffebee;
@@ -512,53 +759,93 @@ button:hover {
   border-radius: 4px;
 }
 
-.tiles-display {
+/* 생성된 이미지 표시 */
+.images-display {
   margin-bottom: 30px;
   padding: 20px;
   background-color: #f5f5f5;
   border-radius: 8px;
 }
 
-.tiles-display h2 {
+.images-display h2 {
   margin-top: 0;
   color: #333;
   font-size: 18px;
 }
 
-.tile-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 15px;
-  padding: 10px;
+.images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.image-item {
   background-color: white;
-  border-radius: 4px;
   border: 1px solid #ddd;
-}
-
-.tiles-wrapper {
+  border-radius: 8px;
+  overflow: hidden;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0;
-  flex: 1;
+  flex-direction: column;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.row-actions {
+.image-header {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  background-color: #f9f9f9;
+}
+
+.image-number {
+  font-weight: bold;
+  color: #666;
+  margin-right: 8px;
+}
+
+.image-code {
+  font-family: monospace;
+  color: #999;
+  font-size: 12px;
+}
+
+.image-preview-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background-color: #fafafa;
+  overflow: auto;
+}
+
+.image-preview {
+  max-width: 100%;
+  max-height: 300px;
+  display: block;
+}
+
+.image-actions {
   display: flex;
   gap: 5px;
+  padding: 10px;
+  border-top: 1px solid #eee;
 }
 
 .copy-btn,
-.save-btn,
-.delete-row-btn {
-  padding: 6px 12px;
-  font-size: 14px;
-  min-width: 40px;
+.save-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: bold;
+  transition: background-color 0.3s;
 }
 
 .copy-btn {
   background-color: #2196F3;
+  color: white;
 }
 
 .copy-btn:hover {
@@ -566,22 +853,36 @@ button:hover {
 }
 
 .save-btn {
-  background-color: #FF9800;
+  background-color: #4CAF50;
+  color: white;
 }
 
 .save-btn:hover {
-  background-color: #e68900;
+  background-color: #45a049;
 }
 
-.delete-row-btn {
-  background-color: #f44336;
-  padding: 6px 10px;
+/* 일괄 다운로드 버튼 */
+.batch-download-section {
+  text-align: center;
 }
 
-.delete-row-btn:hover {
-  background-color: #da190b;
+.download-all-btn {
+  padding: 12px 24px;
+  background-color: #9C27B0;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  transition: background-color 0.3s;
 }
 
+.download-all-btn:hover {
+  background-color: #7b1fa2;
+}
+
+/* 정보 섹션 */
 .info-section {
   padding: 20px;
   background-color: #f9f9f9;
@@ -601,31 +902,6 @@ button:hover {
   gap: 20px;
 }
 
-@media (max-width: 600px) {
-  .tile-list {
-    grid-template-columns: 1fr;
-  }
-
-  .input-section {
-    flex-direction: column;
-  }
-
-  input {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .tile-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .row-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-}
-
 .suit-group h4 {
   margin: 0 0 10px 0;
   color: #555;
@@ -638,7 +914,7 @@ button:hover {
   flex-wrap: wrap;
 }
 
-/* 토스트 알림 스타일 */
+/* 토스트 알림 */
 .toast {
   position: fixed;
   bottom: 20px;
@@ -676,5 +952,38 @@ button:hover {
 .toast-leave-to {
   transform: translateX(400px);
   opacity: 0;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+  .form-count-section {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .input-form {
+    flex-direction: column;
+  }
+
+  .form-input {
+    width: 100%;
+  }
+
+  .batch-section {
+    flex-direction: column;
+  }
+
+  .batch-btn,
+  .clear-btn {
+    width: 100%;
+  }
+
+  .images-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tile-list {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

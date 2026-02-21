@@ -166,6 +166,9 @@ const annotationTextStyle = computed(() => {
 
 .annotation {
   /* 색상은 인라인 스타일로 제어 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rotate90-marker {

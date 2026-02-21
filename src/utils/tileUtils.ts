@@ -12,11 +12,11 @@ export function getTilePosition(code: string): { x: number; y: number; isBack: b
 
   const match = code.match(/^(\d+)([mpsz])$/);
   
-  if (!match) {
+  if (!match || !match[1] || !match[2]) {
     throw new Error(`Invalid tile code: ${code}`);
   }
 
-  const number = parseInt(match[1]);
+  const number = parseInt(match[1], 10);
   const suit = match[2];
 
   // 숫자 범위 검증
@@ -42,7 +42,6 @@ export function getTilePosition(code: string): { x: number; y: number; isBack: b
   }
 
   // x축 위치 결정 (숫자별로 -30px씩 변경)
-  const x = 0;
   const xOffset = -(number - 1) * 30;
 
   return { x: xOffset, y, isBack: false };
@@ -90,7 +89,7 @@ export function parseTileString(input: string): string[] {
   let currentNumbers = '';
 
   for (let i = 0; i < input.length; i++) {
-    const char = input[i].toLowerCase();
+    const char = input.charAt(i).toLowerCase();
 
     if (char === ' ') {
       // 띄어쓰기인 경우 공간으로 처리
