@@ -20,17 +20,15 @@
           v-model="form.code"
           type="text"
           placeholder="123m35678p12399s, o (뒷면), 띄어쓰기 등"
-          @keyup.enter="generateSingleImage(index)"
           class="form-input"
         />
-        <button @click="generateSingleImage(index)" class="gen-single-btn">생성</button>
       </div>
     </div>
     
-    <!-- 일괄 생성 버튼 섹션 -->
+    <!-- 생성 버튼 섹션 -->
     <div class="batch-section">
       <button @click="generateAllImages" class="batch-btn" :disabled="inputForms.every(f => !f.code.trim())">
-        모든 이미지 일괄 생성
+        이미지 생성
       </button>
       <button @click="clearAllTiles" class="clear-btn">초기화</button>
     </div>
@@ -174,44 +172,6 @@ const decreaseFormCount = () => {
   }
 }
 
-/**
- * 단일 이미지 생성
- */
-const generateSingleImage = (formIndex: number) => {
-  const form = inputForms.value[formIndex]
-  if (!form) return
-  
-  const code = form.code.toLowerCase().trim()
-  
-  if (!code) {
-    errorMessage.value = '마작패 코드를 입력하세요.'
-    return
-  }
-
-  try {
-    const parsedTiles = parseTileString(code)
-    // 기존 같은 코드의 이미지가 있으면 제거
-    generatedImages.value = generatedImages.value.filter(img => img.code !== code)
-    errorMessage.value = ''
-    
-    // 비동기로 이미지 생성
-    renderTilesToCanvas(parsedTiles).then((canvas) => {
-      const dataUrl = canvas.toDataURL('image/png')
-      generatedImages.value.push({
-        code,
-        dataUrl,
-        tiles: parsedTiles
-      })
-      showToastMessage(`이미지 #${formIndex + 1} 생성 완료`, 'success')
-    }).catch((error) => {
-      errorMessage.value = `생성 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`
-      showToastMessage(errorMessage.value, 'error')
-    })
-  } catch (error) {
-    errorMessage.value = `입력 오류: ${error instanceof Error ? error.message : '올바른 형식이 아닙니다.'}`
-    showToastMessage(errorMessage.value, 'error')
-  }
-}
 
 /**
  * 모든 이미지 일괄 생성
@@ -699,6 +659,7 @@ h1 {
   font-weight: bold;
   color: #666;
   min-width: 40px;
+  flex-shrink: 0;
 }
 
 .form-input {
@@ -713,23 +674,6 @@ h1 {
   outline: none;
   border-color: #4CAF50;
   box-shadow: 0 0 5px rgba(76, 175, 80, 0.3);
-}
-
-.gen-single-btn {
-  padding: 8px 16px;
-  background-color: #2196F3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: bold;
-  transition: background-color 0.3s;
-  white-space: nowrap;
-}
-
-.gen-single-btn:hover {
-  background-color: #0b7dda;
 }
 
 /* 일괄 처리 섹션 */
