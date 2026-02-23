@@ -341,7 +341,9 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
     case 's': y = -88; break
     case 'z': y = -132; break
   }
-  const x = -(number - 1) * 30
+  // 적도라(0)은 1~9 다음 열(우측 끝 = index 9)에 위치
+  const xIndex = suit !== 'z' && number === 0 ? 9 : (number - 1)
+  const x = -xIndex * 30
 
   // 임시 캔버스에 타일 그리기
   const tempCanvas = document.createElement('canvas')

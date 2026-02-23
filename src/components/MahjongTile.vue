@@ -125,7 +125,8 @@ const tileStyle = computed(() => {
       backgroundImage: 'url(/tiles.svg)',
       backgroundPosition: backgroundPosition,
       backgroundRepeat: 'no-repeat',
-      backgroundSize: '270px 176px',
+      // 적도라 추가로 스프라이트 가로폭이 300px (10열)
+      backgroundSize: '300px 176px',
       width: '30px',
       height: '44px',
       display: 'inline-block',

@@ -1,6 +1,7 @@
 /**
  * 마작패 코드를 background-position 값으로 변환
- * @param code 마작패 코드 (예: '1m', '5p', '3s', '4z', 'o' - 뒷면)
+ * - 적도라(빨강 5)는 0m/0p/0s 로 표기하며 각 수패 행의 가장 오른쪽 열(1~9 다음)에 위치
+ * @param code 마작패 코드 (예: '1m', '5p', '3s', '4z', '0m', '0p', '0s', 'o' - 뒷면)
  * @returns {x: number, y: number, isBack: boolean} background-position에 사용할 pixel 값 및 뒷면 여부
  */
 export function getTilePosition(code: string): { x: number; y: number; isBack: boolean } {
@@ -20,8 +21,16 @@ export function getTilePosition(code: string): { x: number; y: number; isBack: b
   const suit = match[2];
 
   // 숫자 범위 검증
-  if (number < 1 || number > 9 || (suit === 'z' && number > 7)) {
-    throw new Error(`Invalid tile code: ${code}`);
+  // - 수패(m/p/s): 1~9 또는 0(적도라)
+  // - 자패(z): 1~7만 허용, 0 불가
+  if (suit === 'z') {
+    if (number < 1 || number > 7) {
+      throw new Error(`Invalid tile code: ${code}`);
+    }
+  } else {
+    if (!(number === 0 || (number >= 1 && number <= 9))) {
+      throw new Error(`Invalid tile code: ${code}`);
+    }
   }
 
   // y축 위치 결정 (suit별로 고정)
@@ -42,7 +51,9 @@ export function getTilePosition(code: string): { x: number; y: number; isBack: b
   }
 
   // x축 위치 결정 (숫자별로 -30px씩 변경)
-  const xOffset = -(number - 1) * 30;
+  // 적도라(0)은 1~9 다음 열(우측 끝 = index 9)로 매핑
+  const xIndex = number === 0 ? 9 : (number - 1);
+  const xOffset = -xIndex * 30;
 
   return { x: xOffset, y, isBack: false };
 }
@@ -78,6 +89,7 @@ export function isTileBack(code: string): boolean {
 /**
  * 연달아 입력된 마작패 코드를 파싱하여 개별 타일 코드 배열로 변환
  * 예: '123m35678p12399s' -> ['1m', '2m', '3m', '3p', '5p', '6p', '7p', '8p', '1s', '2s', '3s', '9s', '9s']
+ * 적도라: 0m(적5만), 0p(적5통), 0s(적5삭)
  * 'o'는 뒷면, 띄어쓰기는 공간으로 처리
  * 'd'는 도라, 'm'은 쯔모, 'r'은 론, 't'는 타패
  * 'y'는 다음 코드를 90도 회전
