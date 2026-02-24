@@ -1,6 +1,8 @@
 <template>
   <div class="tile-input-container">
     <h1>마작패 이미지 생성기</h1>
+
+    <p>Powered by 엑솔마장</p>
     
     <!-- 입력 폼 개수 조절 섹션 -->
     <div class="form-count-section">
@@ -114,7 +116,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import MahjongTile from '../components/MahjongTile.vue'
-import { parseTileString } from '../utils/tileUtils'
+import { parseTileString, type ParsedResult } from '../utils/tileUtils'
 
 interface InputForm {
   code: string
@@ -124,6 +126,7 @@ interface GeneratedImage {
   code: string
   dataUrl: string
   tiles: string[]
+  text: string | null
 }
 
 const inputForms = ref<InputForm[]>([{ code: '' }])
@@ -197,14 +200,15 @@ const generateAllImages = async () => {
       if (!form) continue
       
       const code = form.code.toLowerCase().trim()
-      const parsedTiles = parseTileString(code)
-      const canvas = await renderTilesToCanvas(parsedTiles)
+      const { tiles: parsedTiles, text } = parseTileString(code)
+      const canvas = await renderTilesToCanvas(parsedTiles, text)
       const dataUrl = canvas.toDataURL('image/png')
       
       newImages.push({
         code,
         dataUrl,
-        tiles: parsedTiles
+        tiles: parsedTiles,
+        text
       })
     }
     
@@ -393,7 +397,7 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
 /**
  * 캔버스에 타일들을 렌더링
  */
-const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> => {
+const renderTilesToCanvas = async (tiles: string[], text: string | null): Promise<HTMLCanvasElement> => {
   const canvas = canvasRef.value || document.createElement('canvas')
   const ctx = canvas.getContext('2d')
   
@@ -402,6 +406,7 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
   // 캔버스 크기 계산
   const tileHeight = 176 // 44 * 4
   const padding = 20     // 배경 패딩
+  const textHeight = text ? 60 : 0 // 텍스트가 있을 경우 추가 높이
   
   // 첫 번째 패스: 각 타일의 너비 계산
   const tileWidths: number[] = []
@@ -422,7 +427,7 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
 
   // 배경이 있으면 패딩 추가
   const finalWidth = hasBackground.value ? totalWidth + padding * 2 : totalWidth
-  const finalHeight = hasBackground.value ? tileHeight + padding * 2 : tileHeight
+  const finalHeight = hasBackground.value ? tileHeight + padding * 2 + textHeight : tileHeight + textHeight
 
   canvas.width = finalWidth
   canvas.height = finalHeight
@@ -435,6 +440,17 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
     // 배경 투명하게 설정
     ctx.clearRect(0, 0, canvas.width, canvas.height)
   }
+  
+  const contentOffsetY = hasBackground.value ? padding : 0
+
+  // 텍스트 그리기
+  if (text) {
+    ctx.fillStyle = hasBackground.value ? 'white' : 'black'
+    ctx.font = 'bold 32px Arial'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    ctx.fillText(text, contentOffsetY, contentOffsetY)
+  }
 
   // tiles.svg 이미지 로드
   const img = new Image()
@@ -443,7 +459,7 @@ const renderTilesToCanvas = async (tiles: string[]): Promise<HTMLCanvasElement> 
   return new Promise((resolve, reject) => {
     img.onload = () => {
       let currentX = hasBackground.value ? padding : 0
-      const posY = hasBackground.value ? padding : 0
+      const posY = contentOffsetY + textHeight
       try {
         let nextTileRotated = false
         
@@ -578,7 +594,7 @@ const clearAllTiles = () => {
 
 h1 {
   text-align: center;
-  color: #333;
+  /* color: #333; */
   margin-bottom: 30px;
 }
 
