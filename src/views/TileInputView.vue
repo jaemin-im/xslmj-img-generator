@@ -385,8 +385,11 @@ const renderTileOnCanvas = (ctx: CanvasRenderingContext2D, img: HTMLImageElement
   // 회전 적용
   if (rotated) {
     ctx.save()
-    ctx.translate(posX + tileWidth / 2, posY + tileHeight / 2)
+    // 회전된 타일의 중심을 기준으로 회전
+    // 차지하는 공간은 tileHeight x tileWidth가 됨
+    ctx.translate(posX + tileHeight / 2, posY + tileWidth / 2)
     ctx.rotate((90 * Math.PI) / 180)
+    // 원본 크기의 캔버스를 중심에 그림
     ctx.drawImage(tempCanvas, -tileWidth / 2, -tileHeight / 2)
     ctx.restore()
   } else {
@@ -410,21 +413,30 @@ const renderTilesToCanvas = async (tiles: string[], text: string | null): Promis
   const fontSize = 48 // 32 * 1.5
   const textHeight = text ? fontSize + 24 : 0 // 텍스트가 있을 경우 추가 높이 (폰트 크기 + 패딩)
   
-  // 첫 번째 패스: 각 타일의 너비 계산
-  const tileWidths: number[] = []
+  // 첫 번째 패스: 너비 및 회전 정보 계산
+  const tileInfos: { baseWidth: number; effectiveWidth: number; rotated: boolean }[] = []
   let totalWidth = 0
   const annotationTiles = ['d', '_tsumoannotation_', '_ronannotation_', '_discardannotation_']
   const annotationMargin = 12
-  
+  let nextTileShouldBeRotated = false
+
   for (const tile of tiles) {
     if (tile === '_rotate90_') {
-      tileWidths.push(0)
-    } else {
-      const width = calculateTileWidth(tile, ctx)
-      tileWidths.push(width)
-      const rightMargin = annotationTiles.includes(tile) ? annotationMargin : 0
-      totalWidth += width + rightMargin
+      nextTileShouldBeRotated = true
+      tileInfos.push({ baseWidth: 0, effectiveWidth: 0, rotated: false })
+      continue
     }
+
+    const isRotated = nextTileShouldBeRotated
+    nextTileShouldBeRotated = false
+
+    const baseWidth = calculateTileWidth(tile, ctx)
+    const effectiveWidth = isRotated ? tileHeight : baseWidth
+
+    tileInfos.push({ baseWidth, effectiveWidth, rotated: isRotated })
+
+    const rightMargin = annotationTiles.includes(tile) ? annotationMargin : 0
+    totalWidth += effectiveWidth + rightMargin
   }
 
   // 항상 패딩 적용
@@ -460,38 +472,30 @@ const renderTilesToCanvas = async (tiles: string[], text: string | null): Promis
 
   return new Promise((resolve, reject) => {
     img.onload = () => {
-      let currentX = padding
-      const posY = contentOffsetY + textHeight
       try {
-        let nextTileRotated = false
+        let currentX = padding
+        const posY = contentOffsetY + textHeight
         
         for (let i = 0; i < tiles.length; i++) {
           const tile = tiles[i]
-          if (!tile) continue
+          if (!tile || tile === '_rotate90_') continue
           
-          const currentRotated = nextTileRotated
-          nextTileRotated = false
-          
-          if (tile === '_rotate90_') {
-            // 다음 타일을 회전 표시
-            nextTileRotated = true
-            continue
-          }
-          
-          const width = tileWidths[i]
-          if (width === undefined) continue
-          
+          const info = tileInfos[i]
+          if (!info) continue
+
+          const { baseWidth, effectiveWidth, rotated } = info
           const rightMargin = annotationTiles.includes(tile) ? annotationMargin : 0
           
           if (tile === '_space_') {
             if (!hasBackground.value) {
               ctx.fillStyle = 'transparent'
-              ctx.fillRect(currentX, posY, width, tileHeight)
+              ctx.fillRect(currentX, posY, baseWidth, tileHeight)
             }
-            currentX += width
+            currentX += baseWidth
           } else {
-            renderTileOnCanvas(ctx, img, tile, currentX, width, tileHeight, posY, currentRotated)
-            currentX += width + rightMargin
+            const currentPosY = rotated ? posY + (tileHeight - baseWidth) : posY
+            renderTileOnCanvas(ctx, img, tile, currentX, baseWidth, tileHeight, currentPosY, rotated)
+            currentX += effectiveWidth + rightMargin
           }
         }
         resolve(canvas)
