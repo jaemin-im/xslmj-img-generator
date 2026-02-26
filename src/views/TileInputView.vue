@@ -2,7 +2,8 @@
   <div class="tile-input-container">
     <h1>마작패 이미지 생성기</h1>
 
-    <p>Powered by 엑솔마장</p>
+    <p>Powered by</p>
+    <img src="/xslmj-logo.png" alt="엑솔마장" style="width: 200px; margin-bottom: 30px;" />
     
     <!-- 입력 폼 개수 조절 섹션 -->
     <div class="form-count-section">
