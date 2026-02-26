@@ -406,7 +406,8 @@ const renderTilesToCanvas = async (tiles: string[], text: string | null): Promis
   // 캔버스 크기 계산
   const tileHeight = 176 // 44 * 4
   const padding = 20     // 배경 패딩
-  const textHeight = text ? 60 : 0 // 텍스트가 있을 경우 추가 높이
+  const fontSize = 48 // 32 * 1.5
+  const textHeight = text ? fontSize + 24 : 0 // 텍스트가 있을 경우 추가 높이 (폰트 크기 + 패딩)
   
   // 첫 번째 패스: 각 타일의 너비 계산
   const tileWidths: number[] = []
@@ -425,9 +426,9 @@ const renderTilesToCanvas = async (tiles: string[], text: string | null): Promis
     }
   }
 
-  // 배경이 있으면 패딩 추가
-  const finalWidth = hasBackground.value ? totalWidth + padding * 2 : totalWidth
-  const finalHeight = hasBackground.value ? tileHeight + padding * 2 + textHeight : tileHeight + textHeight
+  // 항상 패딩 적용
+  const finalWidth = totalWidth + padding * 2
+  const finalHeight = tileHeight + padding * 2 + textHeight
 
   canvas.width = finalWidth
   canvas.height = finalHeight
@@ -441,12 +442,12 @@ const renderTilesToCanvas = async (tiles: string[], text: string | null): Promis
     ctx.clearRect(0, 0, canvas.width, canvas.height)
   }
   
-  const contentOffsetY = hasBackground.value ? padding : 0
+  const contentOffsetY = padding
 
   // 텍스트 그리기
   if (text) {
     ctx.fillStyle = hasBackground.value ? 'white' : 'black'
-    ctx.font = 'bold 32px Arial'
+    ctx.font = `bold ${fontSize}px Arial`
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
     ctx.fillText(text, contentOffsetY, contentOffsetY)
@@ -458,7 +459,7 @@ const renderTilesToCanvas = async (tiles: string[], text: string | null): Promis
 
   return new Promise((resolve, reject) => {
     img.onload = () => {
-      let currentX = hasBackground.value ? padding : 0
+      let currentX = padding
       const posY = contentOffsetY + textHeight
       try {
         let nextTileRotated = false
